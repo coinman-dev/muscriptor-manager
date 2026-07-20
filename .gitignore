@@ -1,0 +1,17 @@
+# Local MuScriptor installation data
+muscriptor_env/
+HuggingFaceCache/
+logs/
+muscriptor.pid
+muscriptor.state.json
+
+# Local configuration and secrets
+.env
+.env.*
+*.token
+*.secret
+
+# PowerShell and editor files
+*.ps1.user
+.vscode/
+.idea/
