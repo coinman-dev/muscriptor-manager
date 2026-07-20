@@ -12,6 +12,7 @@ The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 - Supports `small`, `medium`, and `large` MuScriptor models.
 - Downloads models only when they are missing and checks their cache state.
 - Requests a Hugging Face token when it is required; tokens are not saved unless `-SaveToken` is supplied.
+- Checks access to gated Hugging Face models before downloading and gives a direct access link instead of exposing HTTP tracebacks.
 - Starts the web UI in the current console or in the background.
 - Uses UTF-8 for Python output on Windows consoles configured with legacy code pages.
 - Registers the installation root as `Muscriptor`, validates the environment beneath it before reuse, and removes the registration on uninstall.

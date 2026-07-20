@@ -528,23 +528,75 @@ resolve_huggingface_token() {
     fi
 }
 
+check_huggingface_model_access() {
+    local repository=$1 status
+    status=$(MUSCRIPTOR_ACCESS_REPOSITORY="$repository" "$PYTHON_EXE" - 2>/dev/null <<'PYTHON' || true
+import os
+from huggingface_hub import HfApi
+from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+try:
+    HfApi().model_info(os.environ["MUSCRIPTOR_ACCESS_REPOSITORY"], token=os.environ.get("HF_TOKEN"))
+    print("ACCESS_GRANTED")
+except (GatedRepoError, RepositoryNotFoundError):
+    print("ACCESS_DENIED")
+except Exception:
+    print("ACCESS_CHECK_FAILED")
+PYTHON
+)
+    case $status in
+        ACCESS_GRANTED) return 0 ;;
+        ACCESS_DENIED) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+confirm_huggingface_model_access() {
+    local name=$1 repository="MuScriptor/muscriptor-$name" access_status response
+    while true; do
+        if check_huggingface_model_access "$repository"; then
+            return
+        fi
+        access_status=$?
+        if [[ $access_status -eq 2 ]]; then
+            die 'The Hugging Face access check could not be completed. Check your internet connection and token.'
+        fi
+
+        warn "Your Hugging Face account does not have access to model '$name' yet."
+        printf 'Open this page, accept the terms or request access: https://huggingface.co/%s\n' "$repository"
+        [[ $NON_INTERACTIVE == false && -t 0 ]] || die "Model '$name' requires Hugging Face access. Grant access at https://huggingface.co/$repository, then run the command again."
+        read -r -p 'After access is granted, press Enter to retry; type Q to cancel: ' response
+        [[ $response =~ ^[Qq]$ ]] && die "Download cancelled. Grant access at https://huggingface.co/$repository, then run the command again."
+    done
+}
+
 download_model() {
-    local name=$1 force=$2 repository
+    local name=$1 force=$2 repository output
     repository="MuScriptor/muscriptor-$name"
     step "Downloading model '$name'"
     printf 'License page: https://huggingface.co/%s\n' "$repository"
-    if ! MUSCRIPTOR_DOWNLOAD_REPO=$repository MUSCRIPTOR_FORCE_DOWNLOAD=$force "$PYTHON_EXE" - <<'PYTHON'
+    if ! output=$(MUSCRIPTOR_DOWNLOAD_REPO=$repository MUSCRIPTOR_FORCE_DOWNLOAD=$force "$PYTHON_EXE" - 2>/dev/null <<'PYTHON'
 import os
+import sys
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import GatedRepoError
 
 repository = os.environ["MUSCRIPTOR_DOWNLOAD_REPO"]
 force_download = os.environ["MUSCRIPTOR_FORCE_DOWNLOAD"] == "true"
-for filename in ("config.json", "model.safetensors"):
-    print(f"cached: {hf_hub_download(repo_id=repository, filename=filename, force_download=force_download)}")
+try:
+    for filename in ("config.json", "model.safetensors"):
+        print(f"cached: {hf_hub_download(repo_id=repository, filename=filename, force_download=force_download)}")
+except GatedRepoError:
+    print("ACCESS_DENIED")
+    sys.exit(3)
+except Exception:
+    print("DOWNLOAD_FAILED")
+    sys.exit(1)
 PYTHON
-    then
-        die "Unable to download '$name'. Accept the license at https://huggingface.co/$repository and verify HF_TOKEN."
+); then
+        die "Unable to download '$name'. Check your internet connection and run the command again."
     fi
+    printf '%s\n' "$output"
     get_model_state "$name"
     [[ -n $MODEL_WEIGHTS ]] || die "The download completed, but model '$name' was not found in the expected cache."
     info "Model '$name' is ready ($(awk "BEGIN {printf \"%.2f\", $MODEL_SIZE / 1073741824}") GB)."
@@ -566,6 +618,7 @@ ensure_models() {
     [[ ${#missing[@]} -gt 0 ]] || return
     resolve_huggingface_token
     for name in "${missing[@]}"; do
+        confirm_huggingface_model_access "$name"
         download_model "$name" "$force"
     done
 }

@@ -878,6 +878,56 @@ function Resolve-HuggingFaceToken {
     return $resolvedToken
 }
 
+function Test-HuggingFaceModelAccess {
+    param([Parameter(Mandatory = $true)][string]$Repository)
+
+    $env:MUSCRIPTOR_ACCESS_REPOSITORY = $Repository
+    $accessCheckCode = @'
+import os
+from huggingface_hub import HfApi
+from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+try:
+    HfApi().model_info(os.environ["MUSCRIPTOR_ACCESS_REPOSITORY"], token=os.environ.get("HF_TOKEN"))
+    print("ACCESS_GRANTED")
+except (GatedRepoError, RepositoryNotFoundError):
+    print("ACCESS_DENIED")
+except Exception:
+    print("ACCESS_CHECK_FAILED")
+'@
+    try {
+        $output = & $PythonExe -c $accessCheckCode 2>$null
+        $status = ([string]($output | Select-Object -Last 1)).Trim()
+        if ($status -eq 'ACCESS_GRANTED') {
+            return $true
+        }
+        if ($status -eq 'ACCESS_DENIED') {
+            return $false
+        }
+        throw 'The Hugging Face access check could not be completed. Check your internet connection and token.'
+    } finally {
+        Remove-Item Env:MUSCRIPTOR_ACCESS_REPOSITORY -ErrorAction SilentlyContinue
+    }
+}
+
+function Confirm-HuggingFaceModelAccess {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $repository = "MuScriptor/muscriptor-$Name"
+    while (-not (Test-HuggingFaceModelAccess -Repository $repository)) {
+        Write-Warning "Your Hugging Face account does not have access to model '$Name' yet."
+        Write-Host "Open this page, accept the terms or request access: https://huggingface.co/$repository" -ForegroundColor Cyan
+        if ($NonInteractive) {
+            throw "Model '$Name' requires Hugging Face access. Grant access at https://huggingface.co/$repository, then run the command again."
+        }
+
+        $response = Read-Host 'After access is granted, press Enter to retry; type Q to cancel'
+        if ($response -match '^[Qq]$') {
+            throw "Download cancelled. Grant access at https://huggingface.co/$repository, then run the command again."
+        }
+    }
+}
+
 function Invoke-ModelDownload {
     param(
         [Parameter(Mandatory = $true)]
@@ -897,22 +947,32 @@ function Invoke-ModelDownload {
 
     $downloadCode = @'
 import os
+import sys
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import GatedRepoError
 
 repo = os.environ["MUSCRIPTOR_DOWNLOAD_REPO"]
 force = os.environ.get("MUSCRIPTOR_FORCE_DOWNLOAD") == "1"
-for filename in ("config.json", "model.safetensors"):
-    path = hf_hub_download(repo_id=repo, filename=filename, force_download=force)
-    print(f"cached: {path}")
+try:
+    for filename in ("config.json", "model.safetensors"):
+        path = hf_hub_download(repo_id=repo, filename=filename, force_download=force)
+        print(f"cached: {path}")
+except GatedRepoError:
+    print("ACCESS_DENIED")
+    sys.exit(3)
+except Exception:
+    print("DOWNLOAD_FAILED")
+    sys.exit(1)
 '@
 
     try {
-        & $PythonExe -c $downloadCode | Out-Host
+        $output = & $PythonExe -c $downloadCode 2>$null
         if ($LASTEXITCODE -ne 0) {
-            throw "Download command exited with code $LASTEXITCODE."
+            throw "Unable to download '$Name'. Check your internet connection and run the command again."
         }
+        $output | Out-Host
     } catch {
-        throw "Unable to download '$Name'. Accept the license at https://huggingface.co/$repository and verify HF_TOKEN. $($_.Exception.Message)"
+        throw $_.Exception.Message
     } finally {
         Remove-Item Env:MUSCRIPTOR_DOWNLOAD_REPO -ErrorAction SilentlyContinue
         Remove-Item Env:MUSCRIPTOR_FORCE_DOWNLOAD -ErrorAction SilentlyContinue
@@ -952,6 +1012,7 @@ function Ensure-Models {
 
     [void](Resolve-HuggingFaceToken)
     foreach ($name in $modelsToDownload) {
+        Confirm-HuggingFaceModelAccess -Name $name
         Invoke-ModelDownload -Name $name -Force:$Force
     }
 }
