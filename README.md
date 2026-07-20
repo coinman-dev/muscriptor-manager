@@ -33,6 +33,13 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\muscriptor_manager.ps1
 ```
 
+When launching from Total Commander, use the included command wrapper because Windows PowerShell file associations can discard `.ps1` arguments:
+
+```text
+muscriptor_manager.cmd -DownloadAll
+muscriptor_manager.cmd -Help
+```
+
 On the first installation, the script proposes `D:\Muscriptor` when drive `D:` exists; otherwise it proposes `C:\Muscriptor`. Enter another directory if needed. After a successful installation, the manager records that root in the `Muscriptor` environment variable and verifies its Python and MuScriptor executables before reusing it. Run PowerShell as Administrator to save `Muscriptor` as a system variable; otherwise it is saved for the current user.
 
 The Web UI is available at `http://127.0.0.1:8222/`. Press `Ctrl+C` to stop a foreground server.
