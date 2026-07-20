@@ -1,4 +1,4 @@
-name: PowerShell validation
+name: Script validation
 
 on:
   push:
@@ -33,3 +33,11 @@ jobs:
             $issues | Format-Table -AutoSize | Out-String | Write-Error
             exit 1
           }
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check Bash syntax
+        run: bash -n muscriptor_manager.sh
+      - name: Run ShellCheck
+        run: shellcheck muscriptor_manager.sh

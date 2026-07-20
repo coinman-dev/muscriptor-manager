@@ -1,12 +1,13 @@
-# MuScriptor Windows Manager
+# MuScriptor Manager
 
-PowerShell manager for installing, updating, and running [MuScriptor](https://github.com/MuScriptor/muscriptor) on Windows with NVIDIA GPU detection and Hugging Face model downloads.
+PowerShell and Bash managers for installing, updating, and running [MuScriptor](https://github.com/MuScriptor/muscriptor) on Windows and Linux with NVIDIA GPU detection and Hugging Face model downloads.
 
 The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 
 ## Features
 
 - Installs `uv`, Python 3.12, MuScriptor, and an appropriate PyTorch build.
+- Includes `muscriptor_manager.ps1` for Windows and `muscriptor_manager.sh` for Linux.
 - Detects NVIDIA GPU generation, driver version, and CUDA compatibility.
 - Supports `small`, `medium`, and `large` MuScriptor models.
 - Downloads models only when they are missing and checks their cache state.
@@ -17,12 +18,11 @@ The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 
 ## Requirements
 
-- Windows 10 or Windows 11.
-- Windows PowerShell 5.1 or PowerShell 7+.
+- Windows 10 or Windows 11 with Windows PowerShell 5.1 or PowerShell 7+, or a Linux distribution with Bash 4+.
 - Internet access for the first installation and model download.
 - An NVIDIA GPU and current driver for CUDA acceleration. CPU mode is supported but is considerably slower.
 
-## Quick Start
+## Windows Quick Start
 
 Open PowerShell in the directory containing the script and run:
 
@@ -35,7 +35,18 @@ On the first installation, the script proposes `D:\Muscriptor` when drive `D:` e
 
 The Web UI is available at `http://127.0.0.1:8222/`. Press `Ctrl+C` to stop a foreground server.
 
-## Common Commands
+## Linux Quick Start
+
+Make the Bash manager executable and run it:
+
+```bash
+chmod +x muscriptor_manager.sh
+./muscriptor_manager.sh
+```
+
+On the first installation, the script proposes `~/.local/share/muscriptor`. Enter another directory if needed. The server is available at `http://127.0.0.1:8222/`; press `Ctrl+C` to stop a foreground server.
+
+## Windows Commands
 
 ```powershell
 # Show detected GPU, driver, and recommended PyTorch CUDA build
@@ -70,6 +81,39 @@ The Web UI is available at `http://127.0.0.1:8222/`. Press `Ctrl+C` to stop a fo
 
 Run `.\muscriptor_manager.ps1 -Help` for every available option.
 
+## Linux Commands
+
+```bash
+# Show detected GPU, driver, and recommended PyTorch CUDA build
+./muscriptor_manager.sh --gpu-info
+
+# Install or repair only the environment
+./muscriptor_manager.sh --install
+
+# Update MuScriptor and the selected PyTorch CUDA build
+./muscriptor_manager.sh --update
+
+# Run a specific model or start in the background
+./muscriptor_manager.sh --model medium
+./muscriptor_manager.sh --model small --start
+
+# Download models without starting the server
+./muscriptor_manager.sh --download --model medium
+./muscriptor_manager.sh --download-all
+
+# Inspect and stop the background server
+./muscriptor_manager.sh --status
+./muscriptor_manager.sh --stop
+
+# Use a specific installation directory
+./muscriptor_manager.sh --directory /mnt/models/muscriptor --model large
+
+# Remove the managed environment, cache, logs, and Bash PATH entry
+./muscriptor_manager.sh --uninstall
+```
+
+Run `./muscriptor_manager.sh --help` for every available option.
+
 ## Hugging Face Token
 
 Some model downloads require a Hugging Face read token. The script requests one interactively when necessary:
@@ -78,7 +122,7 @@ Some model downloads require a Hugging Face read token. The script requests one 
 .\muscriptor_manager.ps1 -Token hf_your_token_here -Download -Model large
 ```
 
-Use `-SaveToken` only if you explicitly want the token stored in the user-level `HF_TOKEN` environment variable. Do not commit tokens, caches, logs, or local installation directories to Git.
+On Windows, use `-SaveToken` only if you explicitly want the token stored in the user-level `HF_TOKEN` environment variable. On Linux, use `--save-token` only if you explicitly want the token stored in a mode-600 user config file. Do not commit tokens, caches, logs, or local installation directories to Git.
 
 ## CUDA Notes
 
@@ -88,7 +132,7 @@ The manager selects a PyTorch build based on GPU compute capability and the inst
 - RTX 50xx requires the `cu130` build and an NVIDIA driver version `580.65` or newer.
 - Pascal GPUs, such as GTX 1070 Ti, use `cu126` when supported by the driver.
 
-The script installs the PyTorch CUDA runtime, not the Windows NVIDIA driver. Update the driver from [NVIDIA's driver download page](https://www.nvidia.com/Download/index.aspx) when the manager requests it.
+The scripts install the PyTorch CUDA runtime, not the NVIDIA driver. Update the driver from [NVIDIA's driver download page](https://www.nvidia.com/Download/index.aspx) or your Linux distribution's NVIDIA driver package when the manager requests it.
 
 ## Development
 
@@ -98,7 +142,12 @@ Run the following before submitting a change:
 Invoke-ScriptAnalyzer -Path .\muscriptor_manager.ps1
 ```
 
-GitHub Actions runs PowerShell parsing and PSScriptAnalyzer for every push and pull request.
+```bash
+shellcheck muscriptor_manager.sh
+bash -n muscriptor_manager.sh
+```
+
+GitHub Actions runs PowerShell parsing, PSScriptAnalyzer, Bash syntax, and ShellCheck for every push and pull request.
 
 ## License
 
