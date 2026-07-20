@@ -884,11 +884,15 @@ function Test-HuggingFaceModelAccess {
     $env:MUSCRIPTOR_ACCESS_REPOSITORY = $Repository
     $accessCheckCode = @'
 import os
-from huggingface_hub import HfApi
+from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 
 try:
-    HfApi().model_info(os.environ["MUSCRIPTOR_ACCESS_REPOSITORY"], token=os.environ.get("HF_TOKEN"))
+    hf_hub_download(
+        repo_id=os.environ["MUSCRIPTOR_ACCESS_REPOSITORY"],
+        filename="config.json",
+        token=os.environ.get("HF_TOKEN"),
+    )
     print("ACCESS_GRANTED")
 except (GatedRepoError, RepositoryNotFoundError):
     print("ACCESS_DENIED")
