@@ -268,7 +268,6 @@ MAINTENANCE OPTIONS
 
 EXAMPLES
   .\muscriptor_manager.ps1 -Model medium
-  .\muscriptor_manager.ps1
   .\muscriptor_manager.ps1 -Model small -Device cpu -Start
   .\muscriptor_manager.ps1 -GpuInfo
   .\muscriptor_manager.ps1 -Update
