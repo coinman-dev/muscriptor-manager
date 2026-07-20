@@ -59,6 +59,7 @@ $PythonExe = $null
 $MuscriptorExe = $null
 $StdOutLog = $null
 $StdErrLog = $null
+$InstallationVariableName = 'Muscriptor'
 
 function Write-Step {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -124,25 +125,71 @@ function Test-MuScriptorEnvironmentDirectory {
         (Test-Path -LiteralPath $executable -PathType Leaf)
 }
 
-function Find-ExistingInstallationDirectory {
-    $candidates = @(
-        (Get-DefaultInstallationDirectory),
-        'D:\Temp\Muscriptor',
-        'C:\Temp\Muscriptor'
-    )
-
-    foreach ($pathValue in @($env:Path, [Environment]::GetEnvironmentVariable('Path', 'User'))) {
-        if (-not [string]::IsNullOrWhiteSpace($pathValue)) {
-            $candidates += $pathValue -split ';'
-        }
-    }
-
-    foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
-        if (Test-MuScriptorEnvironmentDirectory -TargetDirectory $candidate) {
-            return $candidate.Trim().Trim('"')
+function Get-RegisteredInstallationDirectory {
+    foreach ($scope in @('Machine', 'User')) {
+        $candidate = [Environment]::GetEnvironmentVariable($InstallationVariableName, $scope)
+        if ((-not [string]::IsNullOrWhiteSpace($candidate)) -and
+            (Test-MuScriptorEnvironmentDirectory -TargetDirectory $candidate)) {
+            return [PSCustomObject]@{
+                Directory = $candidate.Trim().Trim('"')
+                Scope     = $scope
+            }
         }
     }
     return $null
+}
+
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Register-InstallationDirectory {
+    $target = Get-NormalizedPathEntry -PathEntry $Directory
+    $machineDirectory = [Environment]::GetEnvironmentVariable($InstallationVariableName, 'Machine')
+    if ((-not [string]::IsNullOrWhiteSpace($machineDirectory)) -and
+        (Get-NormalizedPathEntry -PathEntry $machineDirectory) -eq $target) {
+        [Environment]::SetEnvironmentVariable($InstallationVariableName, $Directory, 'Process')
+        return
+    }
+
+    $scope = 'Machine'
+    if (-not (Test-IsAdministrator)) {
+        $scope = 'User'
+        $userDirectory = [Environment]::GetEnvironmentVariable($InstallationVariableName, 'User')
+        if ((-not [string]::IsNullOrWhiteSpace($userDirectory)) -and
+            (Get-NormalizedPathEntry -PathEntry $userDirectory) -eq $target) {
+            [Environment]::SetEnvironmentVariable($InstallationVariableName, $Directory, 'Process')
+            return
+        }
+        Write-Warning "Run PowerShell as Administrator to store $InstallationVariableName as a system variable. It will be stored for the current user instead."
+    }
+
+    [Environment]::SetEnvironmentVariable($InstallationVariableName, $Directory, $scope)
+    [Environment]::SetEnvironmentVariable($InstallationVariableName, $Directory, 'Process')
+    Write-Host "Registered $InstallationVariableName=$Directory ($scope environment)." -ForegroundColor Green
+}
+
+function Unregister-InstallationDirectory {
+    $target = Get-NormalizedPathEntry -PathEntry $Directory
+    foreach ($scope in @('Machine', 'User')) {
+        $registeredDirectory = [Environment]::GetEnvironmentVariable($InstallationVariableName, $scope)
+        if ([string]::IsNullOrWhiteSpace($registeredDirectory) -or
+            (Get-NormalizedPathEntry -PathEntry $registeredDirectory) -ne $target) {
+            continue
+        }
+        if ($scope -eq 'Machine' -and -not (Test-IsAdministrator)) {
+            throw "Run PowerShell as Administrator to remove the system variable $InstallationVariableName."
+        }
+        [Environment]::SetEnvironmentVariable($InstallationVariableName, $null, $scope)
+        Write-Host "Removed $InstallationVariableName from the $scope environment." -ForegroundColor Yellow
+    }
+    $processDirectory = [Environment]::GetEnvironmentVariable($InstallationVariableName, 'Process')
+    if ((-not [string]::IsNullOrWhiteSpace($processDirectory)) -and
+        (Get-NormalizedPathEntry -PathEntry $processDirectory) -eq $target) {
+        [Environment]::SetEnvironmentVariable($InstallationVariableName, $null, 'Process')
+    }
 }
 
 function Resolve-InstallationDirectory {
@@ -152,10 +199,10 @@ function Resolve-InstallationDirectory {
     }
 
     $defaultDirectory = Get-DefaultInstallationDirectory
-    $existingDirectory = Find-ExistingInstallationDirectory
-    if ($existingDirectory) {
-        Set-ManagerPaths -TargetDirectory $existingDirectory
-        Write-Host "Existing installation detected: $Directory" -ForegroundColor Green
+    $registeredInstallation = Get-RegisteredInstallationDirectory
+    if ($registeredInstallation) {
+        Set-ManagerPaths -TargetDirectory $registeredInstallation.Directory
+        Write-Host "Existing installation detected: $Directory (registered in $($registeredInstallation.Scope) environment)." -ForegroundColor Green
         return
     }
 
@@ -621,6 +668,7 @@ function Ensure-Environment {
     $installedVersion = Get-MuScriptorVersion
     $environmentReady = (Test-EnvironmentInstalled) -and (-not [string]::IsNullOrWhiteSpace($installedVersion))
     if ($environmentReady -and -not $Upgrade) {
+        Register-InstallationDirectory
         Add-InstallationDirectoryToUserPath
         Write-Host "Environment detected (MuScriptor $installedVersion)." -ForegroundColor Green
         return
@@ -668,6 +716,7 @@ function Ensure-Environment {
         -FailureMessage 'The installed Python environment failed its import check'
 
     $version = Get-MuScriptorVersion
+    Register-InstallationDirectory
     Add-InstallationDirectoryToUserPath
     Write-Host "MuScriptor $version is ready." -ForegroundColor Green
 }
@@ -1150,6 +1199,7 @@ function Start-MuScriptorConsole {
 function Uninstall-MuScriptor {
     Write-Step 'Uninstalling MuScriptor'
     Stop-MuScriptorServer
+    Unregister-InstallationDirectory
     Remove-InstallationDirectoryFromUserPath
 
     if (Test-Path -LiteralPath $EnvPath) {

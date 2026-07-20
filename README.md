@@ -14,6 +14,7 @@ The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 - Requests a Hugging Face token when it is required; tokens are not saved unless `-SaveToken` is supplied.
 - Starts the web UI in the current console or in the background.
 - Uses UTF-8 for Python output on Windows consoles configured with legacy code pages.
+- Registers the installation root as `Muscriptor`, validates the environment beneath it before reuse, and removes the registration on uninstall.
 - Adds the selected installation directory to the current user's `PATH` after a successful installation and removes it on uninstall.
 
 ## Requirements
@@ -31,7 +32,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\muscriptor_manager.ps1
 ```
 
-On the first installation, the script proposes `D:\Muscriptor` when drive `D:` exists; otherwise it proposes `C:\Muscriptor`. Enter another directory if needed. Existing installations, including the legacy `D:\Temp\Muscriptor` location, are detected automatically.
+On the first installation, the script proposes `D:\Muscriptor` when drive `D:` exists; otherwise it proposes `C:\Muscriptor`. Enter another directory if needed. After a successful installation, the manager records that root in the `Muscriptor` environment variable and verifies its Python and MuScriptor executables before reusing it. Run PowerShell as Administrator to save `Muscriptor` as a system variable; otherwise it is saved for the current user.
 
 The Web UI is available at `http://127.0.0.1:8222/`. Press `Ctrl+C` to stop a foreground server.
 
@@ -44,7 +45,7 @@ chmod +x muscriptor_manager.sh
 ./muscriptor_manager.sh
 ```
 
-On the first installation, the script proposes `~/.local/share/muscriptor`. Enter another directory if needed. The server is available at `http://127.0.0.1:8222/`; press `Ctrl+C` to stop a foreground server.
+On the first installation, the script proposes `~/.local/share/muscriptor`. Enter another directory if needed. After a successful installation, the manager stores `Muscriptor` in `~/.config/muscriptor-manager/installation.sh`, loads it itself, and exposes it through `.bashrc`. The server is available at `http://127.0.0.1:8222/`; press `Ctrl+C` to stop a foreground server.
 
 ## Windows Commands
 

@@ -22,6 +22,7 @@ MODEL_NAMES=(small medium large)
 CONFIG_DIRECTORY="${XDG_CONFIG_HOME:-$HOME/.config}/muscriptor-manager"
 TOKEN_FILE="$CONFIG_DIRECTORY/hf_token"
 PATH_FILE="$CONFIG_DIRECTORY/path.sh"
+INSTALLATION_FILE="$CONFIG_DIRECTORY/installation.sh"
 BASHRC_FILE="$HOME/.bashrc"
 
 color() {
@@ -168,23 +169,19 @@ environment_exists_at() {
     [[ -x "$candidate/muscriptor_env/bin/python" && -x "$candidate/muscriptor_env/bin/muscriptor" ]]
 }
 
-find_existing_installation() {
-    local default_directory candidate entry
-    default_directory=$(default_installation_directory)
-    local -a candidates=("$default_directory" "$HOME/Muscriptor" /opt/muscriptor)
-    IFS=':' read -r -a path_entries <<< "$PATH"
-    for entry in "${path_entries[@]}"; do
-        if [[ $entry == */muscriptor_env/bin ]]; then
-            candidates+=("$(dirname "$(dirname "$entry")")")
-        fi
-    done
+load_registered_installation() {
+    if [[ -r $INSTALLATION_FILE ]]; then
+        # shellcheck disable=SC1090 # The manager creates this private config file.
+        . "$INSTALLATION_FILE"
+    fi
+}
 
-    for candidate in "${candidates[@]}"; do
-        if environment_exists_at "$candidate"; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    done
+find_registered_installation() {
+    load_registered_installation
+    if [[ -n ${Muscriptor:-} ]] && environment_exists_at "$Muscriptor"; then
+        printf '%s\n' "$Muscriptor"
+        return 0
+    fi
     return 1
 }
 
@@ -195,9 +192,9 @@ resolve_installation_directory() {
     fi
 
     local existing default_directory selected
-    if existing=$(find_existing_installation); then
+    if existing=$(find_registered_installation); then
         set_manager_paths "$existing"
-        info "Existing installation detected: $DIRECTORY"
+        info "Existing installation detected: $DIRECTORY (registered in Muscriptor)."
         return
     fi
 
@@ -227,6 +224,24 @@ initialize_manager_directory() {
     export PYTHONIOENCODING=utf-8
 }
 
+register_installation_directory() {
+    mkdir -p "$CONFIG_DIRECTORY"
+    chmod 700 "$CONFIG_DIRECTORY"
+    printf 'export Muscriptor=%q\n' "$DIRECTORY" > "$INSTALLATION_FILE"
+    chmod 600 "$INSTALLATION_FILE"
+    export Muscriptor="$DIRECTORY"
+    info "Registered Muscriptor=$DIRECTORY"
+}
+
+unregister_installation_directory() {
+    load_registered_installation
+    if [[ ${Muscriptor:-} == "$DIRECTORY" ]]; then
+        rm -f "$INSTALLATION_FILE"
+        unset Muscriptor
+        info 'Removed Muscriptor registration.'
+    fi
+}
+
 add_to_user_path() {
     local bin_path="$ENV_PATH/bin"
     mkdir -p "$CONFIG_DIRECTORY"
@@ -238,6 +253,7 @@ add_to_user_path() {
     if [[ ! -f $BASHRC_FILE ]] || ! grep -Fq '# >>> muscriptor-manager >>>' "$BASHRC_FILE"; then
         cat >> "$BASHRC_FILE" <<EOF
 # >>> muscriptor-manager >>>
+[ -f "$INSTALLATION_FILE" ] && . "$INSTALLATION_FILE"
 [ -f "$PATH_FILE" ] && . "$PATH_FILE"
 # <<< muscriptor-manager <<<
 EOF
@@ -398,6 +414,7 @@ show_gpu_status() {
 ensure_environment() {
     local upgrade=${1:-false} version uv
     if version=$(muscriptor_version 2>/dev/null) && [[ $upgrade == false ]]; then
+        register_installation_directory
         add_to_user_path
         info "Environment detected (MuScriptor $version)."
         return
@@ -427,6 +444,7 @@ ensure_environment() {
     environment_installed || die 'Installation finished without creating the expected muscriptor executable.'
     "$PYTHON_EXE" -c 'import huggingface_hub, muscriptor, torch; print("torch=" + torch.__version__)'
     version=$(muscriptor_version)
+    register_installation_directory
     add_to_user_path
     info "MuScriptor $version is ready."
 }
@@ -635,6 +653,7 @@ show_status() {
 uninstall() {
     step 'Uninstalling MuScriptor'
     stop_server
+    unregister_installation_directory
     remove_from_user_path
     rm -rf "$ENV_PATH" "$CACHE_PATH" "$LOG_PATH" "$PID_FILE" "$STATE_FILE"
     if [[ $CLEAR_SAVED_TOKEN == true ]]; then
