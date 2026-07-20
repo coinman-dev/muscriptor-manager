@@ -76,7 +76,7 @@ On the first installation, the script proposes `~/.local/share/muscriptor`. Ente
 # Use a specific installation directory
 .\muscriptor_manager.ps1 -Directory 'D:\Muscriptor' -Model large
 
-# Remove the managed environment, cache, logs, and PATH entry
+# Remove the managed environment, cache, logs, PATH entry, and installation root
 .\muscriptor_manager.ps1 -Uninstall
 ```
 
@@ -109,11 +109,13 @@ Run `.\muscriptor_manager.ps1 -Help` for every available option.
 # Use a specific installation directory
 ./muscriptor_manager.sh --directory /mnt/models/muscriptor --model large
 
-# Remove the managed environment, cache, logs, and Bash PATH entry
+# Remove the managed environment, cache, logs, Bash PATH entry, and installation root
 ./muscriptor_manager.sh --uninstall
 ```
 
 Run `./muscriptor_manager.sh --help` for every available option.
+
+`-Uninstall` and `--uninstall` remove the installation root only when it contains no files outside the manager's own environment, cache, logs, and state files. A root containing other files is retained and reported instead.
 
 ## Hugging Face Token
 

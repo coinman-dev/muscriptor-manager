@@ -55,6 +55,7 @@ $CachePath = $null
 $LogPath = $null
 $PidFile = $null
 $StateFile = $null
+$InstallMarker = $null
 $PythonExe = $null
 $MuscriptorExe = $null
 $StdOutLog = $null
@@ -98,6 +99,7 @@ function Set-ManagerPaths {
     $script:LogPath = Join-Path $script:Directory 'logs'
     $script:PidFile = Join-Path $script:Directory 'muscriptor.pid'
     $script:StateFile = Join-Path $script:Directory 'muscriptor.state.json'
+    $script:InstallMarker = Join-Path $script:Directory '.muscriptor-manager'
     $script:PythonExe = Join-Path $script:EnvPath 'Scripts\python.exe'
     $script:MuscriptorExe = Join-Path $script:EnvPath 'Scripts\muscriptor.exe'
     $script:StdOutLog = Join-Path $script:LogPath 'muscriptor.out.log'
@@ -146,6 +148,7 @@ function Test-IsAdministrator {
 }
 
 function Register-InstallationDirectory {
+    Set-Content -LiteralPath $InstallMarker -Value 'Managed by MuScriptor Manager.' -Encoding Ascii
     $target = Get-NormalizedPathEntry -PathEntry $Directory
     $machineDirectory = [Environment]::GetEnvironmentVariable($InstallationVariableName, 'Machine')
     if ((-not [string]::IsNullOrWhiteSpace($machineDirectory)) -and
@@ -299,6 +302,25 @@ function Initialize-ManagerDirectory {
     # Keep the cache private to this manager instead of changing user-wide settings.
     $env:HF_HOME = $CachePath
     $env:HF_HUB_DISABLE_TELEMETRY = '1'
+}
+
+function Test-CanRemoveInstallationRoot {
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
+        return $false
+    }
+
+    $fullDirectory = [IO.Path]::GetFullPath($Directory).TrimEnd('\\')
+    $rootDirectory = [IO.Path]::GetPathRoot($fullDirectory).TrimEnd('\\')
+    if ($fullDirectory -eq $rootDirectory) {
+        return $false
+    }
+
+    $managedNames = @('muscriptor_env', 'HuggingFaceCache', 'logs', 'muscriptor.pid', 'muscriptor.state.json', '.muscriptor-manager')
+    $items = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)
+    if ($items.Count -eq 0) {
+        return $false
+    }
+    return @($items | Where-Object { $_.Name -notin $managedNames }).Count -eq 0
 }
 
 function Invoke-ExternalCommand {
@@ -1199,6 +1221,7 @@ function Start-MuScriptorConsole {
 function Uninstall-MuScriptor {
     Write-Step 'Uninstalling MuScriptor'
     Stop-MuScriptorServer
+    $removeInstallationRoot = Test-CanRemoveInstallationRoot
     Unregister-InstallationDirectory
     Remove-InstallationDirectoryFromUserPath
 
@@ -1214,6 +1237,13 @@ function Uninstall-MuScriptor {
         Remove-Item -LiteralPath $LogPath -Recurse -Force
     }
     Remove-RuntimeFiles
+
+    if ($removeInstallationRoot -and (Test-Path -LiteralPath $Directory -PathType Container)) {
+        Write-Host "Removing installation directory: $Directory" -ForegroundColor Yellow
+        Remove-Item -LiteralPath $Directory -Recurse -Force
+    } elseif (Test-Path -LiteralPath $Directory -PathType Container) {
+        Write-Warning "Installation directory was retained because it contains files not managed by MuScriptor: $Directory"
+    }
 
     if ($ClearSavedToken) {
         [Environment]::SetEnvironmentVariable('HF_TOKEN', $null, 'User')
@@ -1263,7 +1293,9 @@ function Invoke-Main {
     Assert-Windows
     Enable-Utf8Runtime
     Resolve-InstallationDirectory
-    Initialize-ManagerDirectory
+    if (-not $Uninstall) {
+        Initialize-ManagerDirectory
+    }
 
     if ($SaveToken) {
         [void](Resolve-HuggingFaceToken)

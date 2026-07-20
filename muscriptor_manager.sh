@@ -227,6 +227,7 @@ initialize_manager_directory() {
 register_installation_directory() {
     mkdir -p "$CONFIG_DIRECTORY"
     chmod 700 "$CONFIG_DIRECTORY"
+    printf 'Managed by MuScriptor Manager.\n' > "$DIRECTORY/.muscriptor-manager"
     printf 'export Muscriptor=%q\n' "$DIRECTORY" > "$INSTALLATION_FILE"
     chmod 600 "$INSTALLATION_FILE"
     export Muscriptor="$DIRECTORY"
@@ -271,6 +272,22 @@ remove_from_user_path() {
     local bin_path="$ENV_PATH/bin"
     PATH=$(printf '%s' "$PATH" | awk -v target="$bin_path" -F: '{ for (i = 1; i <= NF; i++) { if ($i != target && $i != "") { printf "%s%s", separator, $i; separator=":" } } }')
     export PATH
+}
+
+can_remove_installation_root() {
+    [[ -d $DIRECTORY ]] || return 1
+    local resolved_directory item_name has_managed_item=false
+    resolved_directory=$(readlink -f "$DIRECTORY")
+    [[ $resolved_directory != / ]] || return 1
+
+    while IFS= read -r item_name; do
+        case $item_name in
+            muscriptor_env|HuggingFaceCache|logs|muscriptor.pid|muscriptor.state|.muscriptor-manager)
+                has_managed_item=true ;;
+            *) return 1 ;;
+        esac
+    done < <(find "$DIRECTORY" -mindepth 1 -maxdepth 1 -printf '%f\n')
+    [[ $has_managed_item == true ]]
 }
 
 find_uv() {
@@ -653,9 +670,17 @@ show_status() {
 uninstall() {
     step 'Uninstalling MuScriptor'
     stop_server
+    local remove_installation_root=false
+    if can_remove_installation_root; then remove_installation_root=true; fi
     unregister_installation_directory
     remove_from_user_path
     rm -rf "$ENV_PATH" "$CACHE_PATH" "$LOG_PATH" "$PID_FILE" "$STATE_FILE"
+    if [[ $remove_installation_root == true && -d $DIRECTORY ]]; then
+        printf 'Removing installation directory: %s\n' "$DIRECTORY"
+        rm -rf "$DIRECTORY"
+    elif [[ -d $DIRECTORY ]]; then
+        warn "Installation directory was retained because it contains files not managed by MuScriptor: $DIRECTORY"
+    fi
     if [[ $CLEAR_SAVED_TOKEN == true ]]; then
         rm -f "$TOKEN_FILE"
         info 'Saved HF_TOKEN removed.'
@@ -667,7 +692,9 @@ main() {
     [[ $(uname -s) == Linux ]] || die 'This manager targets Linux. Use muscriptor_manager.ps1 on Windows.'
     parse_arguments "$@"
     resolve_installation_directory
-    initialize_manager_directory
+    if [[ $ACTION != uninstall ]]; then
+        initialize_manager_directory
+    fi
 
     case $ACTION in
         uninstall) uninstall; return ;;
