@@ -231,6 +231,7 @@ add_to_user_path() {
     local bin_path="$ENV_PATH/bin"
     mkdir -p "$CONFIG_DIRECTORY"
     chmod 700 "$CONFIG_DIRECTORY"
+    # shellcheck disable=SC2016 # Keep $PATH for shells that source this file later.
     printf 'export PATH=%q:"$PATH"\n' "$bin_path" > "$PATH_FILE"
     chmod 600 "$PATH_FILE"
 
