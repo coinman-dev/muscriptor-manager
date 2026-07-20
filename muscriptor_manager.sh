@@ -552,7 +552,8 @@ PYTHON
 }
 
 confirm_huggingface_model_access() {
-    local name=$1 repository="MuScriptor/muscriptor-$name" access_status response
+    local name=$1 access_status response
+    local repository="MuScriptor/muscriptor-$name"
     while true; do
         if check_huggingface_model_access "$repository"; then
             return
