@@ -576,11 +576,11 @@ confirm_huggingface_model_access() {
 }
 
 download_model() {
-    local name=$1 force=$2 repository output
+    local name=$1 force=$2 repository
     repository="MuScriptor/muscriptor-$name"
     step "Downloading model '$name'"
     printf 'License page: https://huggingface.co/%s\n' "$repository"
-    if ! output=$(MUSCRIPTOR_DOWNLOAD_REPO=$repository MUSCRIPTOR_FORCE_DOWNLOAD=$force "$PYTHON_EXE" - 2>/dev/null <<'PYTHON'
+    if ! MUSCRIPTOR_DOWNLOAD_REPO=$repository MUSCRIPTOR_FORCE_DOWNLOAD=$force "$PYTHON_EXE" - <<'PYTHON'
 import os
 import sys
 from huggingface_hub import hf_hub_download
@@ -589,7 +589,10 @@ from huggingface_hub.errors import GatedRepoError
 repository = os.environ["MUSCRIPTOR_DOWNLOAD_REPO"]
 force_download = os.environ["MUSCRIPTOR_FORCE_DOWNLOAD"] == "true"
 try:
+    print("Downloading config.json...", flush=True)
     for filename in ("config.json", "model.safetensors"):
+        if filename == "model.safetensors":
+            print("Downloading model weights. This can take several minutes...", flush=True)
         print(f"cached: {hf_hub_download(repo_id=repository, filename=filename, force_download=force_download)}")
 except GatedRepoError:
     print("ACCESS_DENIED")
@@ -598,10 +601,9 @@ except Exception:
     print("DOWNLOAD_FAILED")
     sys.exit(1)
 PYTHON
-); then
+    then
         die "Unable to download '$name'. Check your internet connection and run the command again."
     fi
-    printf '%s\n' "$output"
     get_model_state "$name"
     [[ -n $MODEL_WEIGHTS ]] || die "The download completed, but model '$name' was not found in the expected cache."
     info "Model '$name' is ready ($(awk "BEGIN {printf \"%.2f\", $MODEL_SIZE / 1073741824}") GB)."

@@ -958,7 +958,10 @@ from huggingface_hub.errors import GatedRepoError
 repo = os.environ["MUSCRIPTOR_DOWNLOAD_REPO"]
 force = os.environ.get("MUSCRIPTOR_FORCE_DOWNLOAD") == "1"
 try:
+    print("Downloading config.json...", flush=True)
     for filename in ("config.json", "model.safetensors"):
+        if filename == "model.safetensors":
+            print("Downloading model weights. This can take several minutes...", flush=True)
         path = hf_hub_download(repo_id=repo, filename=filename, force_download=force)
         print(f"cached: {path}")
 except GatedRepoError:
@@ -970,11 +973,10 @@ except Exception:
 '@
 
     try {
-        $output = & $PythonExe -c $downloadCode 2>$null
+        & $PythonExe -c $downloadCode | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to download '$Name'. Check your internet connection and run the command again."
         }
-        $output | Out-Host
     } catch {
         throw $_.Exception.Message
     } finally {
