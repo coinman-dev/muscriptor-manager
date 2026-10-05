@@ -304,8 +304,9 @@ find_uv() {
 
 install_uv() {
     command -v curl >/dev/null 2>&1 || die 'curl is required to install uv automatically.'
-    step 'Installing uv'
-    curl --fail --location --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | sh
+    # get_uv captures stdout as the uv path, so the installer output goes to stderr.
+    step 'Installing uv' >&2
+    curl --fail --location --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | sh >&2
     export PATH="$HOME/.local/bin:$PATH"
     find_uv || die 'uv installation completed, but uv was not found. Open a new terminal and run the script again.'
 }
@@ -347,12 +348,12 @@ recommended_torch_backend() {
 
     local gpu_info candidate backend minimum_driver
     gpu_info=$(read_gpu_info || true)
-    [[ -n $gpu_info ]] || return
+    [[ -n $gpu_info ]] || return 0
     IFS=',' read -r GPU_NAME GPU_DRIVER GPU_CAPABILITY GPU_MEMORY <<< "$gpu_info"
     GPU_NAME=${GPU_NAME## } ; GPU_DRIVER=${GPU_DRIVER## }
     GPU_CAPABILITY=${GPU_CAPABILITY## } ; GPU_MEMORY=${GPU_MEMORY## }
 
-    version_at_least "$GPU_CAPABILITY" 5.0 || return
+    version_at_least "$GPU_CAPABILITY" 5.0 || return 0
     local -a candidates=()
     if version_at_least "$GPU_CAPABILITY" 10.0; then
         candidates=('cu130:580.65')
@@ -622,7 +623,7 @@ ensure_models() {
             info "Model '$name' is already downloaded."
         fi
     done
-    [[ ${#missing[@]} -gt 0 ]] || return
+    [[ ${#missing[@]} -gt 0 ]] || return 0
     resolve_huggingface_token
     for name in "${missing[@]}"; do
         confirm_huggingface_model_access "$name"
