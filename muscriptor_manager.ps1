@@ -464,6 +464,21 @@ function Test-EnvironmentInstalled {
         (Test-Path -LiteralPath $MuscriptorExe -PathType Leaf)
 }
 
+function Test-EnvironmentPython {
+    # python.exe outlives its base interpreter when the installation moves to another
+    # Windows profile or machine, or the uv-managed Python is removed; it then cannot start.
+    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        & $PythonExe -c 'import sys' 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
 function Get-MuScriptorVersion {
     if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
         return $null
@@ -696,8 +711,11 @@ function Ensure-Environment {
     }
 
     $uvExecutable = Get-UvExecutable
-    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+    if (-not (Test-EnvironmentPython)) {
         Write-Step 'Creating Python environment'
+        if (Test-Path -LiteralPath $PythonExe -PathType Leaf) {
+            Write-Warning 'The existing Python environment cannot start and will be recreated. Downloaded models are kept.'
+        }
         $venvArguments = @('venv', '--python', '3.12')
         if (Test-Path -LiteralPath $EnvPath) {
             $venvArguments += '--clear'

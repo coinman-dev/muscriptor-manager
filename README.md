@@ -15,6 +15,7 @@ The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 - Checks access to gated Hugging Face models before downloading and gives a direct access link instead of exposing HTTP tracebacks.
 - Starts the web UI in the current console or in the background.
 - Uses UTF-8 for Python output on Windows consoles configured with legacy code pages.
+- Recreates a Windows Python environment that can no longer start and keeps the downloaded models.
 - Registers the installation root as `Muscriptor`, validates the environment beneath it before reuse, and removes the registration on uninstall.
 - Adds the selected installation directory to the current user's `PATH` after a successful installation and removes it on uninstall.
 
@@ -43,6 +44,8 @@ muscriptor_manager.cmd -Help
 The command wrapper waits for a key press before Total Commander closes its output window.
 
 On the first installation, the script proposes `D:\Muscriptor` when drive `D:` exists; otherwise it proposes `C:\Muscriptor`. Enter another directory if needed. After a successful installation, the manager records that root in the `Muscriptor` environment variable and verifies its Python and MuScriptor executables before reusing it. Run PowerShell as Administrator to save `Muscriptor` as a system variable; otherwise it is saved for the current user.
+
+If the environment in the selected directory can no longer start, for example after the drive moved to another computer or Windows profile, the manager recreates it and keeps the downloaded models. Pass that directory with `-Directory` or enter it when prompted.
 
 The Web UI is available at `http://127.0.0.1:8222/`. Press `Ctrl+C` to stop a foreground server.
 
