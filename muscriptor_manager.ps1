@@ -732,7 +732,8 @@ function Ensure-Environment {
         throw 'Installation finished without creating the expected muscriptor.exe.'
     }
 
-    $checkCode = 'import huggingface_hub, muscriptor, torch; print("torch=" + torch.__version__)'
+    # Windows PowerShell 5.1 drops double quotes from native arguments, so inline Python uses single quotes.
+    $checkCode = "import huggingface_hub, muscriptor, torch; print('torch=' + torch.__version__)"
     Invoke-ExternalCommand -FilePath $PythonExe -ArgumentList @('-c', $checkCode) `
         -FailureMessage 'The installed Python environment failed its import check'
 
@@ -844,7 +845,7 @@ function Resolve-HuggingFaceToken {
     }
     if ([string]::IsNullOrWhiteSpace($resolvedToken) -and (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
         try {
-            $hubToken = & $PythonExe -c 'from huggingface_hub import get_token; print(get_token() or "")' 2>$null
+            $hubToken = & $PythonExe -c "from huggingface_hub import get_token; print(get_token() or '')" 2>$null
             if ($LASTEXITCODE -eq 0) {
                 $resolvedToken = ($hubToken | Select-Object -Last 1).Trim()
             }
@@ -889,15 +890,15 @@ from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 
 try:
     hf_hub_download(
-        repo_id=os.environ["MUSCRIPTOR_ACCESS_REPOSITORY"],
-        filename="config.json",
-        token=os.environ.get("HF_TOKEN"),
+        repo_id=os.environ['MUSCRIPTOR_ACCESS_REPOSITORY'],
+        filename='config.json',
+        token=os.environ.get('HF_TOKEN'),
     )
-    print("ACCESS_GRANTED")
+    print('ACCESS_GRANTED')
 except (GatedRepoError, RepositoryNotFoundError):
-    print("ACCESS_DENIED")
+    print('ACCESS_DENIED')
 except Exception:
-    print("ACCESS_CHECK_FAILED")
+    print('ACCESS_CHECK_FAILED')
 '@
     try {
         $output = & $PythonExe -c $accessCheckCode 2>$null
@@ -955,20 +956,20 @@ import sys
 from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import GatedRepoError
 
-repo = os.environ["MUSCRIPTOR_DOWNLOAD_REPO"]
-force = os.environ.get("MUSCRIPTOR_FORCE_DOWNLOAD") == "1"
+repo = os.environ['MUSCRIPTOR_DOWNLOAD_REPO']
+force = os.environ.get('MUSCRIPTOR_FORCE_DOWNLOAD') == '1'
 try:
-    print("Downloading config.json...", flush=True)
-    for filename in ("config.json", "model.safetensors"):
-        if filename == "model.safetensors":
-            print("Downloading model weights. This can take several minutes...", flush=True)
+    print('Downloading config.json...', flush=True)
+    for filename in ('config.json', 'model.safetensors'):
+        if filename == 'model.safetensors':
+            print('Downloading model weights. This can take several minutes...', flush=True)
         path = hf_hub_download(repo_id=repo, filename=filename, force_download=force)
-        print(f"cached: {path}")
+        print(f'cached: {path}')
 except GatedRepoError:
-    print("ACCESS_DENIED")
+    print('ACCESS_DENIED')
     sys.exit(3)
 except Exception:
-    print("DOWNLOAD_FAILED")
+    print('DOWNLOAD_FAILED')
     sys.exit(1)
 '@
 
