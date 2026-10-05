@@ -301,6 +301,8 @@ function Initialize-ManagerDirectory {
     # Keep the cache private to this manager instead of changing user-wide settings.
     $env:HF_HOME = $CachePath
     $env:HF_HUB_DISABLE_TELEMETRY = '1'
+    # MuScriptor 0.3.0+ detects tempo with beat_this, which caches its checkpoint through torch.hub.
+    $env:TORCH_HOME = Join-Path $CachePath 'torch'
 }
 
 function Test-CanRemoveInstallationRoot {
@@ -1042,6 +1044,38 @@ function Ensure-Models {
     }
 }
 
+function Ensure-TempoModel {
+    # MuScriptor 0.3.0+ loads this beat_this checkpoint after a transcription to write the
+    # tempo into the MIDI. Fetch it now so that step does not depend on the network.
+    $checkpoint = Join-Path $env:TORCH_HOME 'hub\checkpoints\beat_this-final0.ckpt'
+    if (Test-Path -LiteralPath $checkpoint -PathType Leaf) {
+        return
+    }
+
+    $downloadCode = @'
+import importlib.util
+import sys
+
+if importlib.util.find_spec('beat_this') is None:
+    sys.exit(2)
+from beat_this.inference import load_checkpoint
+
+print('Downloading the tempo detection model...', flush=True)
+try:
+    load_checkpoint('final0')
+except Exception:
+    sys.exit(1)
+'@
+
+    & $PythonExe -c $downloadCode | Out-Host
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'Tempo detection model is ready.' -ForegroundColor Green
+    } elseif ($LASTEXITCODE -ne 2) {
+        # Exit code 2: MuScriptor older than 0.3.0 has no tempo detection.
+        Write-Warning 'Unable to download the tempo detection model. MuScriptor will retry after the first transcription, which then needs internet access.'
+    }
+}
+
 function Read-RuntimeState {
     if (-not (Test-Path -LiteralPath $StateFile -PathType Leaf)) {
         return $null
@@ -1423,12 +1457,14 @@ function Invoke-Main {
 
     if ($DownloadAll) {
         Ensure-Models -Names $ModelNames -Force:$ForceDownload
+        Ensure-TempoModel
         Write-Step 'Downloaded models'
         Show-ModelStatus
         return 0
     }
     if ($Download) {
         Ensure-Models -Names @($Model) -Force:$ForceDownload
+        Ensure-TempoModel
         Show-ModelStatus
         return 0
     }
@@ -1448,6 +1484,7 @@ function Invoke-Main {
         throw "Model '$Model' is not available after download."
     }
 
+    Ensure-TempoModel
     Assert-DeviceAvailable
     if ($Start -or $Restart) {
         Start-MuScriptorBackground -WeightsPath $modelState.Weights

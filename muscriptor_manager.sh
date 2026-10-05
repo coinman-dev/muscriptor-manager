@@ -220,6 +220,8 @@ initialize_manager_directory() {
     mkdir -p "$DIRECTORY" "$CACHE_PATH"
     export HF_HOME="$CACHE_PATH"
     export HF_HUB_DISABLE_TELEMETRY=1
+    # MuScriptor 0.3.0+ detects tempo with beat_this, which caches its checkpoint through torch.hub.
+    export TORCH_HOME="$CACHE_PATH/torch"
     export PYTHONUTF8=1
     export PYTHONIOENCODING=utf-8
 }
@@ -631,6 +633,32 @@ ensure_models() {
     done
 }
 
+ensure_tempo_model() {
+    # MuScriptor 0.3.0+ loads this beat_this checkpoint after a transcription to write the
+    # tempo into the MIDI. Fetch it now so that step does not depend on the network.
+    [[ -s $TORCH_HOME/hub/checkpoints/beat_this-final0.ckpt ]] && return 0
+    local status=0
+    "$PYTHON_EXE" - <<'PYTHON' || status=$?
+import importlib.util
+import sys
+
+if importlib.util.find_spec("beat_this") is None:
+    sys.exit(2)
+from beat_this.inference import load_checkpoint
+
+print("Downloading the tempo detection model...", flush=True)
+try:
+    load_checkpoint("final0")
+except Exception:
+    sys.exit(1)
+PYTHON
+    case $status in
+        0) info 'Tempo detection model is ready.' ;;
+        2) ;; # MuScriptor older than 0.3.0 has no tempo detection.
+        *) warn 'Unable to download the tempo detection model. MuScriptor will retry after the first transcription, which then needs internet access.' ;;
+    esac
+}
+
 server_pid() {
     [[ -f $PID_FILE ]] || return 1
     local pid
@@ -765,8 +793,8 @@ main() {
         gpu-info) step 'GPU and CUDA compatibility'; show_gpu_status; return ;;
         install) ensure_environment false; return ;;
         update) ensure_environment true; return ;;
-        download) ensure_environment false; ensure_models "$FORCE_DOWNLOAD" "$MODEL"; show_model_status; return ;;
-        download-all) ensure_environment false; ensure_models "$FORCE_DOWNLOAD" "${MODEL_NAMES[@]}"; show_model_status; return ;;
+        download) ensure_environment false; ensure_models "$FORCE_DOWNLOAD" "$MODEL"; ensure_tempo_model; show_model_status; return ;;
+        download-all) ensure_environment false; ensure_models "$FORCE_DOWNLOAD" "${MODEL_NAMES[@]}"; ensure_tempo_model; show_model_status; return ;;
     esac
 
     ensure_environment false
@@ -774,6 +802,7 @@ main() {
     ensure_models false "$MODEL"
     get_model_state "$MODEL"
     [[ -n $MODEL_WEIGHTS ]] || die "Model '$MODEL' is not available after download."
+    ensure_tempo_model
     assert_device_available
     if [[ $START_BACKGROUND == true || $RESTART == true ]]; then start_background; else start_console; fi
 }

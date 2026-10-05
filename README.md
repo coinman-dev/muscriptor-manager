@@ -11,6 +11,7 @@ The manager is not affiliated with MuScriptor, Hugging Face, NVIDIA, or PyTorch.
 - Detects NVIDIA GPU generation, driver version, and CUDA compatibility.
 - Supports `small`, `medium`, and `large` MuScriptor models.
 - Downloads models only when they are missing and checks their cache state.
+- Downloads the tempo detection model of MuScriptor 0.3.0 and newer ahead of the first transcription and keeps it in the installation directory.
 - Requests a Hugging Face token when it is required; tokens are not saved unless `-SaveToken` is supplied.
 - Checks access to gated Hugging Face models before downloading and gives a direct access link instead of exposing HTTP tracebacks.
 - Starts the web UI in the current console or in the background.
@@ -129,6 +130,22 @@ Run `.\muscriptor_manager.ps1 -Help` for every available option.
 Run `./muscriptor_manager.sh --help` for every available option.
 
 `-Uninstall` and `--uninstall` remove the installation root only when it contains no files outside the manager's own environment, cache, logs, and state files. A root containing other files is retained and reported instead.
+
+## Updating MuScriptor
+
+A new installation receives the newest MuScriptor release from PyPI. An existing installation keeps its version until you update it:
+
+```powershell
+.\muscriptor_manager.ps1 -Update
+```
+
+```bash
+./muscriptor_manager.sh --update
+```
+
+Downloaded models are kept. Stop a background server with `-Stop` or `--stop` before updating.
+
+MuScriptor 0.3.0 and newer detect tempo and beats with an additional model of about 80 MB. The manager downloads it together with the selected model and stores it in the installation directory, so the first transcription does not have to fetch it.
 
 ## Hugging Face Token
 
