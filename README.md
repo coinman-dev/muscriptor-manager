@@ -1,3 +1,5 @@
+[English](/README.md) | [Русский](/README.ru_RU.md)
+
 # MuScriptor Manager
 
 PowerShell and Bash managers for installing, updating, and running [MuScriptor](https://github.com/MuScriptor/muscriptor) on Windows and Linux with NVIDIA GPU detection and Hugging Face model downloads.
