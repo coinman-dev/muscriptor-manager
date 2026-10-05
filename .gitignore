@@ -11,6 +11,9 @@ muscriptor.state.json
 *.token
 *.secret
 
+# Scratch files
+tmp/
+
 # PowerShell and editor files
 *.ps1.user
 .vscode/
