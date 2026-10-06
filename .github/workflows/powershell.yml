@@ -2,13 +2,25 @@ name: Script validation
 
 on:
   push:
+    branches: [main]
+    paths: ['*.ps1', '*.sh', '.github/workflows/powershell.yml']
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['*.ps1', '*.sh', '.github/workflows/powershell.yml']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -34,6 +46,8 @@ jobs:
             exit 1
           }
   shellcheck:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
